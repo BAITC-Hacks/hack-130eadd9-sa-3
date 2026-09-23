@@ -42,6 +42,24 @@ def parse_selection(payload: dict, candidates: list[Contractor]) -> list[Recomme
 def recommend_contractors(order: SearchRequest, candidates: list[Contractor]) -> list[Recommendation]:
     if not candidates:
         return []
+    mode = os.getenv("AI_MODE", "openai").strip().lower()
+    if mode == "mock":
+        recommendations: list[Recommendation] = []
+        seen_ids: set[str] = set()
+        for candidate in candidates:
+            if candidate.id in seen_ids:
+                continue
+            seen_ids.add(candidate.id)
+            recommendations.append(Recommendation(
+                contractor=candidate,
+                reason="[MOCK — тестовый ответ] Подрядчик взят из переданного списка "
+                       "в порядке входных данных. Это тестовая заглушка без оценки ИИ.",
+            ))
+            if len(recommendations) == 3:
+                break
+        return recommendations
+    if mode != "openai":
+        raise AIServiceError("AI_MODE must be openai or mock.", 503)
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     model = os.getenv("OPENAI_MODEL", "").strip()
     if not api_key or not model:
