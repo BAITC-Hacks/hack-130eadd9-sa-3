@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Хакатон-датасет — анонимные профили подрядчиков</title>
 <style>
   :root { --bg:#f7f5f2; --card:#fff; --text:#1f1b16; --muted:#7a7268; --accent:#3f6fb3; --border:#e7e1d8; }
@@ -25,6 +26,38 @@
   .tag-synth { background:#e6f4ea; color:#1e7b34; }
   .desc { font-size:12px; color:var(--text); line-height:1.4; margin:4px 0 0; }
   .count { padding:0 28px; font-size:12px; color:var(--muted); }
+  button, input, select, textarea { font:inherit; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+  .filter-dialog { width:min(620px, calc(100% - 32px)); max-height:85vh; padding:0; border:1px solid var(--border); border-radius:18px; color:var(--text); background:var(--bg); box-shadow:0 20px 70px #1f1b1633; }
+  .filter-dialog::backdrop { background:#1f1b1655; }
+  .panel-heading, .panel-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:18px 22px; background:var(--card); }
+  .panel-heading { border-bottom:1px solid var(--border); position:sticky; top:0; z-index:2; }
+  .panel-heading h2 { margin:0; font-size:18px; }
+  .panel-heading p, .hint { font-size:12px; color:var(--muted); margin:6px 0 0; }
+  .panel-fields { padding:18px 22px; display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .field { display:flex; flex-direction:column; gap:7px; font-size:13px; min-width:0; }
+  .full-width { grid-column:1 / -1; }
+  fieldset.field { border:0; padding:0; margin:0; }
+  fieldset.field legend { padding:0; margin-bottom:8px; }
+  .choice-list { display:flex; flex-wrap:wrap; gap:6px; }
+  .choice { position:relative; cursor:pointer; }
+  .choice input { position:absolute; opacity:0; width:1px; height:1px; }
+  .choice span { display:block; padding:6px 11px; border:1px solid var(--border); border-radius:999px; background:var(--card); font-size:12px; }
+  .choice input:checked + span { background:var(--accent); color:white; border-color:var(--accent); }
+  .choice input:focus-visible + span { outline:2px solid var(--accent); outline-offset:3px; }
+  .field input:not([type=checkbox]):not([type=range]), .field select, .field textarea { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--card); color:var(--text); }
+  .field textarea { resize:vertical; min-height:84px; }
+  input[type=range] { width:100%; margin:8px 0; accent-color:var(--accent); }
+  .range-labels { display:flex; justify-content:space-between; font-size:12px; color:var(--muted); }
+  .panel-actions { border-top:1px solid var(--border); flex-wrap:wrap; position:sticky; bottom:0; z-index:2; }
+  .panel-actions .filter-btn { padding:9px 16px; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .form-status { margin:0; padding:0 22px 16px; font-size:13px; }
+  .form-status:empty { display:none; }
+  .form-status.error { color:#a12d24; }
+  .results-status { padding:12px 28px 0; margin:0; font-size:13px; color:var(--muted); }
+  .results-status:empty { display:none; }
+  @media (max-width:520px) { .panel-fields { grid-template-columns:1fr; } .filters { padding:14px 16px; } .grid { padding:20px 16px; } }
 </style>
 </head>
 <body>
@@ -53,7 +86,30 @@
 <button class="filter-btn" data-cat="Фотограф">Фотограф</button>
 <button class="filter-btn" data-cat="Шоу-программа">Шоу-программа</button>
 </div>
-<div class="count" id="count"></div>
+<dialog class="filter-dialog" id="filter-dialog" aria-labelledby="filter-title">
+  <form id="filter-form">
+    <div class="panel-heading">
+      <div><h2 id="filter-title">Подобрать подрядчиков</h2><p>Укажите нужные параметры — остальные можно оставить пустыми.</p></div>
+      <button class="filter-btn" type="button" id="close-filters" aria-label="Закрыть фильтры">✕</button>
+    </div>
+    <div class="panel-fields">
+      <fieldset class="field full-width"><legend>Профессии и категории</legend><div class="choice-list" id="category-options"></div><p class="hint">Подойдёт любая из выбранных категорий. Без выбора — все.</p></fieldset>
+      <label class="field">Город<select name="city"><option value="">Любой город</option><option>Алматы</option><option>Астана</option><option>Зарубежье</option></select></label>
+      <label class="field">Формат мероприятия<select name="event_format"><option value="">Любой формат</option><option value="свадьба">Свадьба</option><option value="корпоратив">Корпоратив</option><option value="конференция">Конференция</option><option value="юбилей">Юбилей</option><option value="день рождения">День рождения</option><option value="той">Той</option></select></label>
+      <label class="field">Цена от, ₸<input type="number" name="min_price_kzt" min="0" step="1" placeholder="Без минимума"></label>
+      <label class="field">Цена до, ₸<input type="number" name="max_price_kzt" min="0" step="1" placeholder="Без ограничения"></label>
+      <div class="field full-width"><label for="price-slider">Максимальная цена: <output id="price-output" for="price-slider">без ограничения</output></label><input id="price-slider" type="range" min="0" max="6000000" step="10000" value="6000000"><div class="range-labels"><span>0 ₸</span><span>6 000 000 ₸</span></div><p class="hint">Точную сумму можно ввести в поле «Цена до».</p></div>
+      <fieldset class="field full-width"><legend>Языки</legend><div class="choice-list"><label class="choice"><input type="checkbox" name="languages" value="русский"><span>Русский</span></label><label class="choice"><input type="checkbox" name="languages" value="казахский"><span>Казахский</span></label><label class="choice"><input type="checkbox" name="languages" value="английский"><span>Английский</span></label></div><p class="hint">Подрядчик должен владеть всеми выбранными языками.</p></fieldset>
+      <label class="field">Дата мероприятия<input type="date" name="event_date"><span class="hint">Исключим занятых в этот день.</span></label>
+      <label class="field">Длительность, часов<input type="number" name="duration_hours" min="0" max="24" step="any" placeholder="Например, 5"></label>
+      <label class="field full-width">Пожелания<textarea name="wishes" maxlength="4000" placeholder="Расскажите о мероприятии и о том, что для вас важно"></textarea><span class="hint">До 4000 символов. Для рекомендаций ИИ, а не для быстрого фильтра.</span></label>
+    </div>
+    <p class="form-status" id="form-status" role="status" aria-live="polite"></p>
+    <div class="panel-actions"><button class="filter-btn" type="reset">Сбросить параметры</button><button class="filter-btn active" type="submit" id="apply-filters">Применить</button></div>
+  </form>
+</dialog>
+<p class="results-status" id="results-status" role="status" aria-live="polite"></p>
+<div class="count" id="count" aria-live="polite"></div>
 <div class="grid" id="grid">
     <article class="card" data-cats="Флорист">
       <div class="body">
@@ -987,27 +1043,172 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
     </article>
 </div>
 <script>
-  const buttons = document.querySelectorAll('.filter-btn');
+  // API contract: POST filter fields as JSON; response: { contractor_ids: ["HK-..."] }.
+  // Optional fields are omitted when empty. Empty arrays mean no category/language restriction.
+  // Serve this page from the same origin as the API, or configure this URL and backend CORS.
+  const FILTER_API_URL = '/api/filter';
+  const buttons = document.querySelectorAll('.filters .filter-btn');
   const cards = document.querySelectorAll('.card');
   const countEl = document.getElementById('count');
-  function applyFilter(cat) {
+  const dialog = document.getElementById('filter-dialog');
+  const form = document.getElementById('filter-form');
+  const formStatus = document.getElementById('form-status');
+  const resultsStatus = document.getElementById('results-status');
+  const submitButton = document.getElementById('apply-filters');
+  const slider = document.getElementById('price-slider');
+  const maximumPrice = form.elements.namedItem('max_price_kzt');
+  const minimumPrice = form.elements.namedItem('min_price_kzt');
+  const duration = form.elements.namedItem('duration_hours');
+  const categoryOptions = document.getElementById('category-options');
+  let submitting = false;
+
+  cards.forEach(card => { card.dataset.id = card.querySelector('.id').textContent.trim(); });
+  const knownIds = new Set(Array.from(cards, card => card.dataset.id));
+  buttons[0].textContent = `Все (${cards.length})`;
+  buttons.forEach(button => {
+    if (button.dataset.cat === '__all__') return;
+    const label = document.createElement('label');
+    label.className = 'choice';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.name = 'categories';
+    input.value = button.dataset.cat;
+    const caption = document.createElement('span');
+    caption.textContent = button.dataset.cat;
+    label.append(input, caption);
+    categoryOptions.append(label);
+  });
+
+  function showCards(ids = null) {
     let visible = 0;
-    cards.forEach(c => {
-      const cats = c.dataset.cats.split('|');
-      const show = cat === '__all__' || cats.includes(cat);
-      c.style.display = show ? '' : 'none';
+    cards.forEach(card => {
+      const show = ids === null || ids.has(card.dataset.id);
+      card.style.display = show ? '' : 'none';
       if (show) visible++;
     });
     countEl.textContent = 'Показано: ' + visible;
   }
-  buttons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      buttons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      applyFilter(btn.dataset.cat);
+
+  function updatePrice() {
+    const value = maximumPrice.value;
+    document.getElementById('price-output').textContent = value === ''
+      ? 'без ограничения' : Number(value).toLocaleString('ru-RU') + ' ₸';
+    slider.value = value === '' ? slider.max : value;
+    minimumPrice.setCustomValidity('');
+  }
+  slider.addEventListener('input', () => {
+    maximumPrice.value = slider.value;
+    updatePrice();
+  });
+  maximumPrice.addEventListener('input', updatePrice);
+  minimumPrice.addEventListener('input', () => minimumPrice.setCustomValidity(''));
+  duration.addEventListener('input', () => duration.setCustomValidity(''));
+
+  buttons.forEach(button => {
+    button.setAttribute('aria-haspopup', 'dialog');
+    button.setAttribute('aria-controls', 'filter-dialog');
+    button.addEventListener('click', () => {
+      categoryOptions.querySelectorAll('input').forEach(input => {
+        input.checked = input.value === button.dataset.cat;
+      });
+      formStatus.textContent = '';
+      dialog.showModal();
+      dialog.scrollTop = 0;
     });
   });
-  applyFilter('__all__');
+  document.getElementById('close-filters').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('cancel', event => { if (submitting) event.preventDefault(); });
+  form.addEventListener('reset', () => {
+    minimumPrice.setCustomValidity('');
+    duration.setCustomValidity('');
+    formStatus.textContent = '';
+    setTimeout(updatePrice, 0);
+  });
+
+  function collectFilters() {
+    const data = new FormData(form);
+    const filters = {
+      categories: data.getAll('categories'),
+      languages: data.getAll('languages')
+    };
+    for (const name of ['city', 'event_format', 'event_date', 'wishes']) {
+      const value = data.get(name).trim();
+      if (value) filters[name] = value;
+    }
+    for (const name of ['min_price_kzt', 'max_price_kzt', 'duration_hours']) {
+      const value = data.get(name);
+      if (value !== '') filters[name] = Number(value);
+    }
+    return filters;
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (submitting) return;
+    minimumPrice.setCustomValidity('');
+    duration.setCustomValidity(duration.value !== '' && Number(duration.value) <= 0
+      ? 'Длительность должна быть больше нуля и не больше 24 часов.' : '');
+    if (minimumPrice.value !== '' && maximumPrice.value !== '' &&
+        Number(minimumPrice.value) > Number(maximumPrice.value)) {
+      minimumPrice.setCustomValidity('Минимальная цена не должна превышать максимальную.');
+    }
+    if (!form.reportValidity()) return;
+    const filters = collectFilters();
+    submitting = true;
+    const controls = Array.from(form.querySelectorAll('input, select, textarea, button'));
+    controls.forEach(control => { control.disabled = true; });
+    form.setAttribute('aria-busy', 'true');
+    submitButton.textContent = 'Подбираем…';
+    formStatus.classList.remove('error');
+    formStatus.textContent = 'Ищем подходящих подрядчиков…';
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      if (location.protocol === 'file:') {
+        throw new Error('Для отправки фильтров откройте страницу через веб-сервер с подключённым API.');
+      }
+      const response = await fetch(FILTER_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(filters),
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error(`Не удалось применить фильтры (HTTP ${response.status}). Попробуйте ещё раз.`);
+      let result;
+      try { result = await response.json(); }
+      catch { throw new Error('Сервер вернул некорректный ответ. Попробуйте позже.'); }
+      if (!result || !Array.isArray(result.contractor_ids) ||
+          !result.contractor_ids.every(id => typeof id === 'string' && knownIds.has(id))) {
+        throw new Error('Ответ сервера не соответствует каталогу анкет. Не удалось обновить результаты.');
+      }
+      const ids = new Set(result.contractor_ids);
+      showCards(ids);
+      buttons.forEach(button => {
+        const active = button.dataset.cat === '__all__'
+          ? filters.categories.length === 0 : filters.categories.includes(button.dataset.cat);
+        button.classList.toggle('active', active);
+      });
+      resultsStatus.textContent = ids.size
+        ? 'Фильтры применены. Найдено анкет: ' + ids.size
+        : 'Подходящих анкет не найдено. Попробуйте изменить параметры.';
+      formStatus.textContent = '';
+      dialog.close();
+    } catch (error) {
+      formStatus.classList.add('error');
+      formStatus.textContent = error.name === 'AbortError'
+        ? 'Сервер не ответил за 20 секунд. Попробуйте ещё раз.'
+        : error instanceof TypeError
+          ? 'Не удалось связаться с сервером. Проверьте подключение и попробуйте ещё раз.'
+          : error.message;
+    } finally {
+      clearTimeout(timeout);
+      submitting = false;
+      controls.forEach(control => { control.disabled = false; });
+      form.removeAttribute('aria-busy');
+      submitButton.textContent = 'Применить';
+    }
+  });
+  showCards();
 </script>
 </body>
 </html>
