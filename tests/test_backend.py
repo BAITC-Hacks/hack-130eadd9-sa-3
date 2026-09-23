@@ -7,14 +7,23 @@ from unittest.mock import patch
 import httpx
 from fastapi.testclient import TestClient
 
-from backend.ai_service import AIServiceError, parse_selection, recommend_contractors
-from backend.dataset import load_contractors
-from backend.filtering import filter_contractors
-from backend.main import app
-from backend.schemas import Recommendation, SearchRequest
+from Backend.ai_service import AIServiceError, parse_selection, recommend_contractors
+from Backend.dataset import load_contractors
+from Backend.filtering import filter_contractors
+from Backend.main import app
+from Backend.schemas import Recommendation, SearchRequest
+from ai_test_support import choice
 
 
 class BackendTests(unittest.TestCase):
+    def setUp(self) -> None:
+        environment = patch.dict(os.environ, {"AI_MODE": "openai", "AI_CACHE_TTL_SECONDS": "0"})
+        environment.start()
+        self.addCleanup(environment.stop)
+        guard = patch("httpx.AsyncHTTPTransport.handle_async_request", side_effect=AssertionError("Unexpected network"))
+        guard.start()
+        self.addCleanup(guard.stop)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.people = load_contractors()
@@ -52,7 +61,7 @@ class BackendTests(unittest.TestCase):
         result = self.client.post("/api/contractors/filter", json={"max_price_kzt": 500000})
         self.assertEqual(result.status_code, 200)
         self.assertTrue(all(p["price_from_kzt"] <= 500000 for p in result.json()["candidates"]))
-        with patch("backend.main.recommend_contractors") as ai:
+        with patch("Backend.main.recommend_contractors") as ai:
             result = self.client.post("/api/contractors/search", json={"max_price_kzt": 0})
             self.assertEqual(result.json()["recommendations"], [])
             ai.assert_not_called()
@@ -70,7 +79,7 @@ class BackendTests(unittest.TestCase):
             self.assertTrue(all(p.city == "Астана" for p in candidates))
             return [Recommendation(contractor=p, reason="Подходит по параметрам") for p in candidates[:3]]
 
-        with patch("backend.main.recommend_contractors", side_effect=fake_ai):
+        with patch("Backend.main.recommend_contractors", side_effect=fake_ai):
             response = self.client.post("/api/contractors/search", json={"city": "Астана"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()["recommendations"]), 3)
@@ -78,7 +87,7 @@ class BackendTests(unittest.TestCase):
 
     def test_ai_selection_validation(self) -> None:
         candidates = self.people[:3]
-        valid = [{"contractor_id": p.id, "reason": "Подходит по данным профиля"} for p in candidates]
+        valid = [choice(p) for p in candidates]
 
         def payload(choices):
             return {"status": "completed", "output": [{"type": "message", "content": [
@@ -103,32 +112,32 @@ class BackendTests(unittest.TestCase):
         request = httpx.Request("POST", "https://api.openai.com/v1/responses")
         result = {"status": "completed", "output": [{"type": "message", "content": [
             {"type": "output_text", "text": json.dumps({"recommendations": [
-                {"contractor_id": candidates[0].id, "reason": "Подходит"}]})}]}]}
+                choice(candidates[0])]})}]}]}
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key", "OPENAI_MODEL": "test-model"}):
-            with patch("backend.ai_service.httpx.Client") as client_class:
-                post = client_class.return_value.__enter__.return_value.post
+            with patch("Backend.ai_service.httpx.AsyncClient") as client_class:
+                post = client_class.return_value.__aenter__.return_value.post
                 post.return_value = httpx.Response(200, json=result, request=request)
                 self.assertEqual(len(recommend_contractors(SearchRequest(), candidates)), 1)
                 sent = post.call_args.kwargs["json"]
                 self.assertEqual(len(json.loads(sent["input"])["candidates"]), 1)
                 self.assertNotIn("test-key", json.dumps(sent))
                 post.side_effect = httpx.ReadTimeout("timeout")
-                with self.assertRaises(AIServiceError) as error:
-                    recommend_contractors(SearchRequest(), candidates)
-                self.assertEqual(error.exception.status_code, 504)
+                fallback = recommend_contractors(SearchRequest(), candidates)
+                self.assertIn("Базовое объяснение без ИИ", fallback[0].reason)
+                self.assertEqual(fallback[0].contractor.id, candidates[0].id)
                 post.side_effect = None
                 post.return_value = httpx.Response(429, json={"error": "secret"}, request=request)
-                with self.assertRaises(AIServiceError) as error:
-                    recommend_contractors(SearchRequest(), candidates)
-                self.assertNotIn("secret", str(error.exception))
+                fallback = recommend_contractors(SearchRequest(), candidates)
+                self.assertIn("Базовое объяснение без ИИ", fallback[0].reason)
+                self.assertNotIn("secret", fallback[0].reason)
 
     def test_api_failure_responses(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": "", "OPENAI_MODEL": ""}):
             self.assertEqual(self.client.post("/api/contractors/search", json={}).status_code, 503)
         for code in [502, 504]:
-            with patch("backend.main.recommend_contractors", side_effect=AIServiceError("Ошибка ИИ", code)):
+            with patch("Backend.main.recommend_contractors", side_effect=AIServiceError("Ошибка ИИ", code)):
                 self.assertEqual(self.client.post("/api/contractors/search", json={}).status_code, code)
-        with patch("backend.main.load_contractors", side_effect=ValueError("Bad CSV")):
+        with patch("Backend.main.load_contractors", side_effect=ValueError("Bad CSV")):
             self.assertEqual(self.client.post("/api/contractors/filter", json={}).status_code, 503)
 
 

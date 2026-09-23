@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.ai_service import AIServiceError, recommend_contractors
-from backend.dataset import load_contractors
-from backend.filtering import filter_contractors
-from backend.schemas import CALENDAR_END, CALENDAR_START, Contractor, FilterResponse, SearchRequest, SearchResponse
+from Backend.ai_service import AIServiceError, recommend_contractors
+from Backend.dataset import load_contractors
+from Backend.filtering import filter_contractors
+from Backend.schemas import CALENDAR_END, CALENDAR_START, Contractor, FilterResponse, SearchRequest, SearchResponse
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 

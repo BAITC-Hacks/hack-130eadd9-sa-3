@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from backend.schemas import Contractor
+from Backend.schemas import Contractor
 
 DATASET_PATH = Path(__file__).resolve().parents[1] / "hackathon dataset anonymized .csv"
 
