@@ -18,7 +18,6 @@ Primary stack:
 
 - Python
 - Fast API
-- PostgreSQL
 - HTML, CSS, JavaScript
 
 ## General coding rules
@@ -68,6 +67,8 @@ blindly trusting model output.
 Handle API failures and invalid responses gracefully.
 
 ## Database rules
+
+- For prototype we have dataset .csv file, take the needed data from there.
 
 ## Dependencies
 
