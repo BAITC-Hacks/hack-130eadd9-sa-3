@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from backend.schemas import Contractor
+from Backend.schemas import Contractor
 
 # Путь относительно этого модуля, а не текущей папки запуска терминала.
 DATASET_PATH = Path(__file__).resolve().parents[1] / "hackathon dataset anonymized .csv"

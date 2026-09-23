@@ -5,8 +5,8 @@ import os
 import httpx
 from pydantic import ValidationError
 
-from backend.prompts import SYSTEM_PROMPT
-from backend.schemas import AISelection, Contractor, Recommendation, SearchRequest
+from Backend.prompts import SYSTEM_PROMPT
+from Backend.schemas import AISelection, Contractor, Recommendation, SearchRequest
 
 
 class AIServiceError(Exception):

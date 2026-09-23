@@ -9,10 +9,10 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
-from backend.ai_service import AIServiceError, recommend_contractors
-from backend.dataset import load_contractors
-from backend.filtering import filter_contractors
-from backend.schemas import CALENDAR_END, CALENDAR_START, Contractor, FilterResponse, SearchRequest, SearchResponse
+from Backend.ai_service import AIServiceError, recommend_contractors
+from Backend.dataset import load_contractors
+from Backend.filtering import filter_contractors
+from Backend.schemas import CALENDAR_END, CALENDAR_START, Contractor, FilterResponse, SearchRequest, SearchResponse
 
 # Загружаем настройки из корня проекта; ключ не передаётся во frontend.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -75,15 +75,16 @@ def preview_filter(order: SearchRequest, people: list[Contractor] = Depends(get_
 
 
 @app.post("/api/filter")
-def frontend_filter(
-    order: SearchRequest, people: list[Contractor] = Depends(get_contractors)
-) -> dict[str, list[str]]:
+def frontend_filter(order: SearchRequest) -> dict[str, list[str]]:
     """Принимает JSON от collectFilters() во frontend; файл не загружается."""
-    # order — проверенные параметры пользователя; people — исходный CSV.
+    # Печатаем только после проверки JSON. Ошибка обработки не должна давать
+    # ложное сообщение об успехе: вторую строку выводим после фильтрации.
+    print("успешно получено", flush=True)
+    people = get_contractors()
     candidates = filter_contractors(people, order)
     # Сообщение означает успешную обработку сервером, даже при пустом результате.
     # Оно не подтверждает, что браузер уже прочитал ответ или обновил карточки.
-    print("успешно", flush=True)
+    print("успешно обработано", flush=True)
     # ВОТ ОТВЕТ FRONTEND: FastAPI отправит HTTP 200 и JSON вида
     # {"contractor_ids": ["HK-44733", "HK-88430"]}. При отсутствии людей — [].
     # Текущий JS проверяет response.ok, но пока не читает этот JSON и не рисует результат.

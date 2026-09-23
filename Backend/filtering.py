@@ -1,5 +1,5 @@
 # Чистая Python-фильтрация: нет HTTP, файлов, ИИ или отправки в браузер.
-from backend.schemas import Contractor, SearchRequest
+from Backend.schemas import Contractor, SearchRequest
 
 
 def normalize(value: str) -> str:
