@@ -1,16 +1,21 @@
 # Внутренний модуль: возвращает Python-объекты в main.search(), не HTTP-ответ браузеру.
 import json
+import logging
+import math
 import os
+import re
+from time import monotonic
+from typing import Annotated
 
 import httpx
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from Backend.prompts import SYSTEM_PROMPT
 from Backend.schemas import AISelection, Contractor, Recommendation, SearchRequest
 
 
 class AIServiceError(Exception):
-    """Безопасное сообщение для клиента без ключей и ответа провайдера."""
+    """Safe public error; never include provider bodies, keys or user input."""
 
     def __init__(self, message: str, status_code: int = 502) -> None:
         super().__init__(message)
@@ -26,7 +31,7 @@ def parse_selection(payload: dict, candidates: list[Contractor]) -> list[Recomme
         parts = [part for item in payload["output"] if item.get("type") == "message"
                  for part in item.get("content", [])]
         if any(part.get("type") == "refusal" for part in parts):
-            raise ValueError("Refusal")
+            raise ValueError("refusal")
         text = "".join(part["text"] for part in parts if part.get("type") == "output_text")
         # Проверка JSON и типов не заменяет бизнес-проверки ID ниже.
         selection = AISelection.model_validate_json(text)

@@ -18,6 +18,14 @@ from Backend.schemas import Recommendation, SearchRequest
 
 
 class BackendTests(unittest.TestCase):
+    def setUp(self) -> None:
+        environment = patch.dict(os.environ, {"AI_MODE": "openai", "AI_CACHE_TTL_SECONDS": "0"})
+        environment.start()
+        self.addCleanup(environment.stop)
+        guard = patch("httpx.AsyncHTTPTransport.handle_async_request", side_effect=AssertionError("Unexpected network"))
+        guard.start()
+        self.addCleanup(guard.stop)
+
     @classmethod
     def setUpClass(cls) -> None:
         cls.people = load_contractors()
@@ -122,7 +130,7 @@ class BackendTests(unittest.TestCase):
 
     def test_ai_selection_validation(self) -> None:
         candidates = self.people[:3]
-        valid = [{"contractor_id": p.id, "reason": "Подходит по данным профиля"} for p in candidates]
+        valid = [choice(p) for p in candidates]
 
         def payload(choices):
             return {"status": "completed", "output": [{"type": "message", "content": [
@@ -147,7 +155,7 @@ class BackendTests(unittest.TestCase):
         request = httpx.Request("POST", "https://api.openai.com/v1/responses")
         result = {"status": "completed", "output": [{"type": "message", "content": [
             {"type": "output_text", "text": json.dumps({"recommendations": [
-                {"contractor_id": candidates[0].id, "reason": "Подходит"}]})}]}]}
+                choice(candidates[0])]})}]}]}
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key", "OPENAI_MODEL": "test-model"}):
             with patch("Backend.ai_service.httpx.Client") as client_class:
                 post = client_class.return_value.__enter__.return_value.post
@@ -157,14 +165,14 @@ class BackendTests(unittest.TestCase):
                 self.assertEqual(len(json.loads(sent["input"])["candidates"]), 1)
                 self.assertNotIn("test-key", json.dumps(sent))
                 post.side_effect = httpx.ReadTimeout("timeout")
-                with self.assertRaises(AIServiceError) as error:
-                    recommend_contractors(SearchRequest(), candidates)
-                self.assertEqual(error.exception.status_code, 504)
+                fallback = recommend_contractors(SearchRequest(), candidates)
+                self.assertIn("Базовое объяснение без ИИ", fallback[0].reason)
+                self.assertEqual(fallback[0].contractor.id, candidates[0].id)
                 post.side_effect = None
                 post.return_value = httpx.Response(429, json={"error": "secret"}, request=request)
-                with self.assertRaises(AIServiceError) as error:
-                    recommend_contractors(SearchRequest(), candidates)
-                self.assertNotIn("secret", str(error.exception))
+                fallback = recommend_contractors(SearchRequest(), candidates)
+                self.assertIn("Базовое объяснение без ИИ", fallback[0].reason)
+                self.assertNotIn("secret", fallback[0].reason)
 
     def test_api_failure_responses(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": "", "OPENAI_MODEL": ""}):
