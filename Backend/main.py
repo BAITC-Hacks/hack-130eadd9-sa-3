@@ -4,6 +4,14 @@
 import os
 from pathlib import Path
 
+# Run в IDE может запускать этот файл напрямую, вне контекста пакета.
+# Используем существующий запускатель: он задаёт корень проекта для Uvicorn.
+if __name__ == "__main__" and not __package__:
+    import runpy
+
+    runpy.run_path(str(Path(__file__).resolve().parents[1] / "main.py"), run_name="__main__")
+    raise SystemExit(0)
+
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
