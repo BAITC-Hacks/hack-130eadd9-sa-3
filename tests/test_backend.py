@@ -1,7 +1,10 @@
 import json
+import io
 import os
 import unittest
+from contextlib import redirect_stdout
 from datetime import date
+from pathlib import Path
 from unittest.mock import patch
 
 import httpx
@@ -24,6 +27,40 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(len(self.people), 66)
         self.assertEqual(len({person.id for person in self.people}), 66)
         self.assertEqual(len(filter_contractors(self.people, SearchRequest())), 66)
+
+    def test_frontend_page_and_json_contract(self) -> None:
+        page = self.client.get("/")
+        self.assertEqual(page.status_code, 200)
+        original = Path("frontend/hackathon dataset preview.html").read_bytes()
+        self.assertEqual(page.content, original)
+        self.assertIn("text/html", page.headers["content-type"])
+        # Тот же JSON, который формирует collectFilters() в HTML.
+        output = io.StringIO()
+        with redirect_stdout(output), patch("backend.main.recommend_contractors") as ai:
+            response = self.client.post("/api/filter", json={
+                "categories": ["Ведущий"], "languages": ["русский"],
+                "city": "Алматы", "max_price_kzt": 1000000,
+            })
+            ai.assert_not_called()
+        self.assertEqual(response.status_code, 200)
+        expected = [p.id for p in self.people if "Ведущий" in p.categories
+                    and "русский" in p.languages and p.city == "Алматы"
+                    and p.price_from_kzt <= 1000000]
+        self.assertTrue(expected)
+        self.assertEqual(response.json(), {"contractor_ids": expected})
+        self.assertEqual(output.getvalue(), "успешно\n")
+
+    def test_frontend_empty_and_invalid_request(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            response = self.client.post("/api/filter", json={"max_price_kzt": 0})
+        self.assertEqual(response.json(), {"contractor_ids": []})
+        self.assertEqual(output.getvalue(), "успешно\n")
+        output = io.StringIO()
+        with redirect_stdout(output):
+            response = self.client.post("/api/filter", json={"max_price_kzt": -1})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(output.getvalue(), "")
 
     def test_combined_filters_and_boundaries(self) -> None:
         person = self.people[1].model_copy(update={

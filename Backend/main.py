@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from backend.ai_service import AIServiceError, recommend_contractors
 from backend.dataset import load_contractors
@@ -21,6 +22,14 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type"],
 )
+
+
+@app.get("/", response_class=FileResponse, include_in_schema=False)
+def frontend_page() -> FileResponse:
+    """Страница и /api/filter на одном адресе: относительный fetch работает без прокси."""
+    return FileResponse(
+        Path(__file__).resolve().parents[1] / "frontend" / "hackathon dataset preview.html"
+    )
 
 
 def get_contractors() -> list[Contractor]:
@@ -51,6 +60,16 @@ def filter_options(people: list[Contractor] = Depends(get_contractors)) -> dict:
 def preview_filter(order: SearchRequest, people: list[Contractor] = Depends(get_contractors)) -> FilterResponse:
     candidates = filter_contractors(people, order)
     return FilterResponse(total_candidates=len(people), matched_candidates=len(candidates), candidates=candidates)
+
+
+@app.post("/api/filter")
+def frontend_filter(
+    order: SearchRequest, people: list[Contractor] = Depends(get_contractors)
+) -> dict[str, list[str]]:
+    """Контракт текущего фронтенда: JSON с фильтрами -> список ID карточек."""
+    candidates = filter_contractors(people, order)
+    print("успешно", flush=True)
+    return {"contractor_ids": [person.id for person in candidates]}
 
 
 @app.post("/api/contractors/search", response_model=SearchResponse)
