@@ -55,8 +55,6 @@
   .form-status { margin:0; padding:0 22px 16px; font-size:13px; }
   .form-status:empty { display:none; }
   .form-status.error { color:#a12d24; }
-  .results-status { padding:12px 28px 0; margin:0; font-size:13px; color:var(--muted); }
-  .results-status:empty { display:none; }
   @media (max-width:520px) { .panel-fields { grid-template-columns:1fr; } .filters { padding:14px 16px; } .grid { padding:20px 16px; } }
 </style>
 </head>
@@ -108,7 +106,6 @@
     <div class="panel-actions"><button class="filter-btn" type="reset">Сбросить параметры</button><button class="filter-btn active" type="submit" id="apply-filters">Применить</button></div>
   </form>
 </dialog>
-<p class="results-status" id="results-status" role="status" aria-live="polite"></p>
 <div class="count" id="count" aria-live="polite"></div>
 <div class="grid" id="grid">
     <article class="card" data-cats="Флорист">
@@ -1043,7 +1040,8 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
     </article>
 </div>
 <script>
-  // API contract: POST filter fields as JSON; response: { contractor_ids: ["HK-..."] }.
+  // POST filter fields as JSON. Any successful HTTP response acknowledges receipt.
+  // Backend owns filtering and terminal logging; this page only submits parameters.
   // Optional fields are omitted when empty. Empty arrays mean no category/language restriction.
   // Serve this page from the same origin as the API, or configure this URL and backend CORS.
   const FILTER_API_URL = '/api/filter';
@@ -1053,7 +1051,6 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
   const dialog = document.getElementById('filter-dialog');
   const form = document.getElementById('filter-form');
   const formStatus = document.getElementById('form-status');
-  const resultsStatus = document.getElementById('results-status');
   const submitButton = document.getElementById('apply-filters');
   const slider = document.getElementById('price-slider');
   const maximumPrice = form.elements.namedItem('max_price_kzt');
@@ -1062,8 +1059,6 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
   const categoryOptions = document.getElementById('category-options');
   let submitting = false;
 
-  cards.forEach(card => { card.dataset.id = card.querySelector('.id').textContent.trim(); });
-  const knownIds = new Set(Array.from(cards, card => card.dataset.id));
   buttons[0].textContent = `Все (${cards.length})`;
   buttons.forEach(button => {
     if (button.dataset.cat === '__all__') return;
@@ -1078,16 +1073,6 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
     label.append(input, caption);
     categoryOptions.append(label);
   });
-
-  function showCards(ids = null) {
-    let visible = 0;
-    cards.forEach(card => {
-      const show = ids === null || ids.has(card.dataset.id);
-      card.style.display = show ? '' : 'none';
-      if (show) visible++;
-    });
-    countEl.textContent = 'Показано: ' + visible;
-  }
 
   function updatePrice() {
     const value = maximumPrice.value;
@@ -1158,9 +1143,9 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
     const controls = Array.from(form.querySelectorAll('input, select, textarea, button'));
     controls.forEach(control => { control.disabled = true; });
     form.setAttribute('aria-busy', 'true');
-    submitButton.textContent = 'Подбираем…';
+    submitButton.textContent = 'Отправляем…';
     formStatus.classList.remove('error');
-    formStatus.textContent = 'Ищем подходящих подрядчиков…';
+    formStatus.textContent = '';
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
     try {
@@ -1173,26 +1158,9 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
         body: JSON.stringify(filters),
         signal: controller.signal
       });
-      if (!response.ok) throw new Error(`Не удалось применить фильтры (HTTP ${response.status}). Попробуйте ещё раз.`);
-      let result;
-      try { result = await response.json(); }
-      catch { throw new Error('Сервер вернул некорректный ответ. Попробуйте позже.'); }
-      if (!result || !Array.isArray(result.contractor_ids) ||
-          !result.contractor_ids.every(id => typeof id === 'string' && knownIds.has(id))) {
-        throw new Error('Ответ сервера не соответствует каталогу анкет. Не удалось обновить результаты.');
-      }
-      const ids = new Set(result.contractor_ids);
-      showCards(ids);
-      buttons.forEach(button => {
-        const active = button.dataset.cat === '__all__'
-          ? filters.categories.length === 0 : filters.categories.includes(button.dataset.cat);
-        button.classList.toggle('active', active);
-      });
-      resultsStatus.textContent = ids.size
-        ? 'Фильтры применены. Найдено анкет: ' + ids.size
-        : 'Подходящих анкет не найдено. Попробуйте изменить параметры.';
-      formStatus.textContent = '';
-      dialog.close();
+      if (!response.ok) throw new Error(`Не удалось отправить параметры (HTTP ${response.status}). Попробуйте ещё раз.`);
+      // Do not read contractor IDs or change cards here: processing belongs to the backend.
+      console.info('Запрос успешно принят сервером');
     } catch (error) {
       formStatus.classList.add('error');
       formStatus.textContent = error.name === 'AbortError'
@@ -1208,7 +1176,7 @@ TOP 7 лучших ведущих KZ по мнению @aniwed.kz.Так же я
       submitButton.textContent = 'Применить';
     }
   });
-  showCards();
+  countEl.textContent = 'Показано: ' + cards.length;
 </script>
 </body>
 </html>
